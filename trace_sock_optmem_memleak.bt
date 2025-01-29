@@ -1,0 +1,96 @@
+//Script to trace socket optional memory allocation (for zero copy in this case) and free calls.
+//Purpose was to check if there is any memory leak in the optional memory allocation for the socket.
+//Use it in ffollowing format: ./bpftrace trace_sunbird.bt 80000 80 
+//arg1 is optmem_max and arg2 is percentage of optmem_max abive which we dump the allocations map
+#ifndef BPFTRACE_HAVE_BTF
+#include <linux/path.h>
+#endif
+
+BEGIN
+{
+    @percentage = $2;
+    @optmem_max = $1;
+}
+
+kprobe:sock_omalloc
+{
+    // Store the function argument `struct sock *sk` in a thread-local variable
+    @sk0 = (struct sock *)arg0;
+}
+
+kretprobe:sock_omalloc
+{
+    // Retrieve the thread-local variable `@sk`
+    $sk = @sk0;
+
+    if ($sk != 0) {
+        // Capture the value of sk_omem_alloc from the sock structure
+        $sk_omem_alloc = (int64 *)(((struct sock *)$sk)->sk_omem_alloc.counter);
+
+        $sk_sndbuf = (int64 *)(((struct sock *)$sk)->sk_sndbuf);
+
+        printf("Time: %s: sock_omalloc returned, sk: %p, sk_omem_alloc: %d sk_sndbuf(send buffer size): %d\n",
+               strftime("%H:%M:%S.%f", nsecs), $sk, $sk_omem_alloc, $sk_sndbuf);
+
+        @alloc_map[(uint64)retval] = kstack();
+	    if((uint32)($sk_omem_alloc) > (uint64)(@optmem_max * @percentage)/100){
+		    print(@alloc_map);
+		    /*
+		    //tried for loop but got syntax error once. Not sure why.
+		    for ($kv : @alloc_map) {
+			    print($kv.0); // key
+			    print($kv.1); // value
+		    }
+		    */
+	    }
+    }
+
+    // Clear the thread-local variable
+    delete(@sk0);
+}
+
+kprobe:sock_kmalloc
+{
+    @sk1 = (struct sock *)arg0;
+}
+
+kretprobe:sock_kmalloc
+{
+    // Retrieve the thread-local variable `@sk`
+    $sk = @sk1;
+
+    if ($sk != 0) {
+        // Capture the value of sk_omem_alloc from the sock structure
+        $sk_omem_alloc = (int64 *)(((struct sock *)$sk)->sk_omem_alloc.counter);
+
+        printf("Time: %s: sock_kmalloc returned, sk: %p, sk_omem_alloc: %d\n",
+               strftime("%H:%M:%S.%f", nsecs), $sk, $sk_omem_alloc);
+    }
+
+    // Clear the thread-local variable
+    delete(@sk1);
+}
+
+kprobe:sock_ofree
+{
+    // Retrieve the first argument of sock_ofree
+    $skb = (struct sk_buff *)arg0;
+
+    // Delete the element in the map whose key equals the first argument of sock_ofree (as u64)
+    delete(@alloc_map[(uint64)$skb]);
+}
+
+/*
+kprobe:__alloc_skb
+{
+    printf("Stack trace for __alloc_skb:\n");
+    print(kstack());
+}
+*/
+
+END
+{
+    clear(@alloc_map);
+    delete(@percentage);
+    delete(@optmem_max);
+}
