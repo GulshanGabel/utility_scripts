@@ -14,7 +14,7 @@ CONFIGURATIONS=(
     "-1 -1 -1 -1" #all cores
     "0 3 4 7" #same ccx
     "0 8 4 9" #Both vm's vpcu same ccx, both vhost same ccx, but vhosts and vcpus on different ccx
-    "0 4 8 4" #vcpus and vhosts per vm on same ccx, but each vcpus and vhosts on different ccx
+    "0 4 8 12" #vcpus and vhosts per vm on same ccx, but each vcpus and vhosts on different ccx
 )
 
 # Function to run all steps for a given configuration
