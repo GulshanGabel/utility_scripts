@@ -11,6 +11,7 @@ RESULT_FILE="/tmp/iperf3_client_results.txt"  # File to save iperf3 results
 REQUIRED_ISOLATED_CORES=8
 # Configurations for pinning
 CONFIGURATIONS=(
+    "-1 -1 -1 -1" #all cores
     "0 3 4 7" #same ccx
     "0 8 4 9" #Both vm's vpcu same ccx, both vhost same ccx, but vhosts and vcpus on different ccx
     "0 4 8 4" #vcpus and vhosts per vm on same ccx, but each vcpus and vhosts on different ccx
@@ -99,15 +100,22 @@ generate_configurations() {
         read -r vm1_vcpus vm1_vhost vm2_vcpus vm2_vhost <<< "$config"
         local new_config=()
         for core in "$vm1_vcpus" "$vm1_vhost" "$vm2_vcpus" "$vm2_vhost"; do
-            if (( base_core < 0 || core < 0 )); then
-                echo "Error: base_core ($base_core) or core ($core) is negative."
-                exit 1
+            if [ "$core" -lt 0 ]; then
+                local online_cpus
+                online_cpus=$(cat /sys/devices/system/cpu/online)
+                new_config+=("$online_cpus")
+                echo "Core $core is negative, using all online CPUs: $online_cpus"
+            else
+                if (( base_core < 0 )); then
+                    echo "Error: base_core ($base_core) is negative."
+                    exit 1
+                fi
+                local adjusted_core=$((base_core + core))
+                new_config+=("$adjusted_core")
             fi
-            local adjusted_core=$((base_core + core))
-            new_config+=("$adjusted_core")
         done
         generated_configs+=("${new_config[*]}")
-    echo "Generated configuration: ${new_config[*]}"
+        echo "Generated configuration: ${new_config[*]}"
     done
     CONFIGURATIONS=("${generated_configs[@]}")
 }

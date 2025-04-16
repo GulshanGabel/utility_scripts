@@ -58,24 +58,38 @@ pin_vm_threads() {
     local vm2_core_start=$3
     local vm2_vhost_core=$4
 
-    # Pin VM1 vCPU threads serially starting from vm1_core_start
-    local core=$vm1_core_start
-    for tid in "${VM1_VCPU_THREADS[@]}"; do
-        pin_threads_to_core "$core" "$tid"
-        core=$((core + 1))
-    done
+    # Check if vm1_core_start is a range
+    if [[ "$vm1_core_start" == *-* ]]; then
+        for tid in "${VM1_VCPU_THREADS[@]}"; do
+            pin_threads_to_core "$vm1_core_start" "$tid"
+        done
+    else
+        # Pin VM1 vCPU threads serially starting from vm1_core_start
+        local core=$vm1_core_start
+        for tid in "${VM1_VCPU_THREADS[@]}"; do
+            pin_threads_to_core "$core" "$tid"
+            core=$((core + 1))
+        done
+    fi
 
     # Pin VM1 vhost threads to vm1_vhost_core
     for tid in "${VM1_VHOST_THREADS[@]}"; do
         pin_threads_to_core "$vm1_vhost_core" "$tid"
     done
 
-    # Pin VM2 vCPU threads serially starting from vm2_core_start
-    core=$vm2_core_start
-    for tid in "${VM2_VCPU_THREADS[@]}"; do
-        pin_threads_to_core "$core" "$tid"
-        core=$((core + 1))
-    done
+    # Check if vm2_core_start is a range
+    if [[ "$vm2_core_start" == *-* ]]; then
+        for tid in "${VM2_VCPU_THREADS[@]}"; do
+            pin_threads_to_core "$vm2_core_start" "$tid"
+        done
+    else
+        # Pin VM2 vCPU threads serially starting from vm2_core_start
+        local core=$vm2_core_start
+        for tid in "${VM2_VCPU_THREADS[@]}"; do
+            pin_threads_to_core "$core" "$tid"
+            core=$((core + 1))
+        done
+    fi
 
     # Pin VM2 vhost threads to vm2_vhost_core
     for tid in "${VM2_VHOST_THREADS[@]}"; do
