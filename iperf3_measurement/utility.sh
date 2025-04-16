@@ -47,6 +47,12 @@ setup_passwordless_ssh() {
     local username=$2
     local password=$3
 
+    # Check if passwordless SSH is already set up
+    if ssh -o PasswordAuthentication=no -o StrictHostKeyChecking=no "$username@$host_ip" "exit" &>/dev/null; then
+        echo "Passwordless SSH is already set up for $username@$host_ip"
+        return
+    fi
+
     # Generate SSH key if not already present
     if [ ! -f ~/.ssh/id_rsa ]; then
         ssh-keygen -t rsa -N "" -f ~/.ssh/id_rsa >> /dev/null

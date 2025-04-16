@@ -82,5 +82,3 @@ check_smt_and_isolated_cores() {
         return 0
     fi
 }
-
-check_smt_and_isolated_cores

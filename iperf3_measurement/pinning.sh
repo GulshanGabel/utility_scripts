@@ -84,6 +84,6 @@ pin_vm_threads() {
 }
 # Example usage:
 
-pin_vm_threads 0 0 4 4
+# pin_vm_threads 0 0 4 4
 # pin_threads_to_core 2 1234 5678
 

@@ -40,6 +40,3 @@ run_iperf3_test() {
     echo "Stopping iperf3 server on VM1 ($vm1_ip)..."
     ssh root@"$vm1_ip" "pkill -f 'iperf3 -s'"
 }
-
-# Call the function
-run_iperf3_test
