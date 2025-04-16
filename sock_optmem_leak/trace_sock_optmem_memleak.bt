@@ -1,0 +1,118 @@
+//Script to trace socket optional memory allocation (for zero copy in this case) and free calls.
+//Purpose was to check if there is any memory leak in the optional memory allocation for the socket.
+//Use it in ffollowing format: ./bpftrace trace_sunbird.bt 80000 80
+//arg1 is optmem_max and arg2 is percentage of optmem_max abive which we dump the allocations map
+
+//there have been many issues here when I tried casting (int64 *) to (uint64)
+
+#ifndef BPFTRACE_HAVE_BTF
+#include <linux/path.h>
+#endif
+
+BEGIN
+{
+    @percentage = $2;
+    @optmem_max = $1;
+    @num_sock_omalloc[tid] = 0;
+    @num_tcp_sendmsg[tid] = 0;
+    @num_alloc_skb[tid] = 0;
+    @flag[tid] = 0;
+}
+
+kretprobe:tcp_sendmsg
+{
+    @flag[tid] = 0;
+}
+
+kprobe:sock_omalloc
+{
+    if(@flag[tid] == 0)
+    {
+	@num_tcp_sendmsg[tid]++;
+        @flag[tid] = 1;
+    }
+    @sk0 = (struct sock *)arg0;
+}
+
+kretprobe:sock_omalloc
+{
+    $sk = @sk0;
+    if ($sk != 0) {
+        $sk_omem_alloc = (int32)((int64 *)((struct sock *)$sk)->sk_omem_alloc.counter);
+
+        if($sk_omem_alloc == 0){
+            @num_sock_omalloc[tid]=0;
+            @num_tcp_sendmsg[tid]= 1;
+            @num_alloc_skb[tid] = 0;
+        }
+        @num_sock_omalloc[tid]++;
+        @alloc_map[(int64 *)retval] = kstack();
+        @alloc_call_map[kstack()]++;
+
+	    if((int32)($sk_omem_alloc) > (int32)((uint32)(@optmem_max * @percentage)/100)){
+		    $sk_sndbuf = (int64 *)(((struct sock *)$sk)->sk_sndbuf);
+            printf("Time: %s: sock_omalloc returned, sk: %p, sk_omem_alloc: %d sk_sndbuf(send buffer size): %d\n",strftime("%H:%M:%S.%f", nsecs), $sk,(uint64)$sk_omem_alloc,(uint64)$sk_sndbuf);
+            printf("Allocation calls\n");
+            print(@alloc_call_map);
+//          printf("Free calls\n");
+//          print(@free_call_map);
+	    }
+    }
+
+    delete(@sk0);
+}
+
+kprobe:sock_ofree
+{
+    $skb = (struct sk_buff *)arg0;
+
+//  if(@alloc_map[(int64 *)$skb])
+//  {
+        @alloc_call_map[@alloc_map[(int64 *)$skb]]--;
+        delete(@alloc_map[(int64 *)$skb]);
+//      @free_call_map[kstack()]++;
+//  }
+}
+
+/*
+kprobe:sock_kmalloc
+{
+    @sk1 = (struct sock *)arg0;
+}
+*/
+
+
+kprobe:__alloc_skb
+{
+    if(@flag[tid] == 1)
+    {
+	@num_alloc_skb[tid]++;
+    }
+}
+/*
+kretprobe:sock_kmalloc
+{
+    // Retrieve the thread-local variable `@sk`
+    $sk = @sk1;
+
+    if ($sk != 0) {
+        // Capture the value of sk_omem_alloc from the sock structure
+        $sk_omem_alloc = (int64 *)(((struct sock *)$sk)->sk_omem_alloc.counter);
+
+        printf("Time: %s: sock_kmalloc returned, sk: %p, sk_omem_alloc: %d\n",
+               strftime("%H:%M:%S.%f", nsecs), $sk, $sk_omem_alloc);
+    }
+
+    // Clear the thread-local variable
+    delete(@sk1);
+}
+*/
+
+END
+{
+    clear(@alloc_map);
+    clear(@alloc_call_map);
+//  clear(@free_call_map);
+    delete(@percentage);
+    delete(@optmem_max);
+}

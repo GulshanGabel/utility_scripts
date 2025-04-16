@@ -1,0 +1,90 @@
+//Script to trace socket optional memory allocation (for zero copy in this case) and free calls.
+//Purpose was to check if there is any memory leak in the optional memory allocation for the socket.
+//Use it in ffollowing format: ./bpftrace trace_sunbird.bt 80000 80
+//arg1 is optmem_max and arg2 is percentage of optmem_max abive which we dump the allocations map
+
+//there have been many issues here when I tried casting (int64 *) to (uint64)
+
+#ifndef BPFTRACE_HAVE_BTF
+#include <linux/path.h>
+#endif
+
+BEGIN
+{
+    @num_sock_omalloc[tid] = 0;
+    @num_tcp_sendmsg[tid] = 0;
+    @num_alloc_skb[tid] = 0;
+    @sk_omem_alloc_prev = (uint64)0;
+    @flag[tid] = 0;
+    @max_omem_alloc = 0;
+}
+
+kretprobe:tcp_sendmsg
+{
+    @flag[tid] = 0;
+}
+
+kprobe:sock_omalloc
+{
+    @sk0 = (struct sock *)arg0;
+    $sk = @sk0;
+    if ($sk != 0) {
+        $sk_omem_alloc = (int32)((int64 *)((struct sock *)$sk)->sk_omem_alloc.counter);
+        if($sk_omem_alloc > @max_omem_alloc){
+            @max_omem_alloc = $sk_omem_alloc;
+        }
+
+        if($sk_omem_alloc == 0){
+            @num_sock_omalloc[tid] = 0;
+            @num_tcp_sendmsg[tid] = 1;
+            @num_alloc_skb[tid] = 0;
+        }
+        
+        if(@flag[tid] == 0)
+        {
+	        @num_tcp_sendmsg[tid]++;
+            @flag[tid] = 1;
+        }
+        
+        @sk_omem_alloc_prev = $sk_omem_alloc;
+        @num_sock_omalloc[tid]++;
+    }
+}
+
+kretprobe:sock_omalloc
+{
+    $sk = @sk0;
+    if ($sk != 0) {
+        $sk_omem_alloc = (int32)((int64 *)((struct sock *)$sk)->sk_omem_alloc.counter);
+        $sk_sndbuf = (int64 *)(((struct sock *)$sk)->sk_sndbuf);
+        if($sk_omem_alloc>70000){
+	    printf("Time: %s: sock_omalloc: sk_omem_alloc_max: %d , sk_omem_alloc: %d\n",strftime("%H:%M:%S.%f", nsecs),(uint64)@max_omem_alloc,(uint64)$sk_omem_alloc);
+    	}
+    }
+}
+
+kprobe:sock_ofree
+{
+    $skb = (struct sk_buff *)arg0;
+    $sk_omem_alloc = (int32)((int64 *)((struct sk_buff *)$skb)->sk->sk_omem_alloc.counter);
+    if($sk_omem_alloc > 70000)
+    {
+            printf("Time: %s: sock_ofree: sk_omem_alloc: %d\n",strftime("%H:%M:%S.%f", nsecs),(uint64)$sk_omem_alloc);
+            @free_call_stack[kstack()]++;
+    }    
+}
+
+kprobe:__alloc_skb
+{
+    if(@flag[tid] == 1)
+    {
+	    @num_alloc_skb[tid]++;
+    }
+}
+
+END
+{
+    clear(@flag);
+    delete(@sk0);
+
+}
