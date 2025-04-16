@@ -75,7 +75,7 @@ run_iperf3_measurements() {
     log_step "Running prechecks"
     check_smt_and_isolated_cores
     check_host_dependencies
-#    get_vm_info
+    get_vm_info
 
     log_step "Generating configurations based on isolated cores"
     generate_configurations
@@ -83,7 +83,7 @@ run_iperf3_measurements() {
     # Main execution loop
     for config in "${CONFIGURATIONS[@]}"; do
         log_step "Processing configuration: $config"
-#        run_for_configuration $config
+        run_for_configuration $config
     done
 
     log_step "All configurations processed successfully."
