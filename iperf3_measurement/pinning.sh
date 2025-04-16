@@ -25,8 +25,8 @@ get_qemu_pids() {
         return 1
     fi
 
-    VM1_PID=$(ps -ax | grep -w "$vm1_uuid" | grep -v grep | awk '{print $1}')
-    VM2_PID=$(ps -ax | grep -w "$vm2_uuid" | grep -v grep | awk '{print $1}')
+    VM1_PID=$(ps -ax | grep qemu | grep -w "$vm1_uuid" | grep -v grep | awk '{print $1}')
+    VM2_PID=$(ps -ax | grep qemu | grep -w "$vm2_uuid" | grep -v grep | awk '{print $1}')
 
     if [ -z "$VM1_PID" ] || [ -z "$VM2_PID" ]; then
         echo "Failed to retrieve QEMU PIDs for VM1 or VM2"
