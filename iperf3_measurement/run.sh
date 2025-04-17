@@ -42,7 +42,7 @@ run_for_configuration() {
     fi
 
     # Create the configuration directory if it does not exist
-    local config_dir="${base_dir}/vm1_${vm1_vcpus}_${vm1_vhost}_vm2_${vm2_vhost}"
+    local config_dir="${base_dir}/vm1_${vm1_vcpus}_${vm1_vhost}_vm2_${vm1_vcpus}_${vm2_vhost}"
     if [ ! -d "$config_dir" ]; then
         mkdir -p "$config_dir"
     fi
@@ -150,7 +150,7 @@ run_iperf3_measurements() {
     log_step "Running prechecks"
     check_smt_and_isolated_cores
     check_host_dependencies
-
+    rm -rf /tmp/iperf_report*
     log_step "Generating configurations based on isolated cores"
     generate_configurations
     # Setup passwordless SSH to CVM
