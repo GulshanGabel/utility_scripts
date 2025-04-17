@@ -33,4 +33,6 @@
         "4"
     )
 
+    IPERF_TIME=30  # Duration of the test in seconds
+    PERF_RECORD_TIME= $IPERF_TIME - 10 # Duration of the perf record in seconds
 

@@ -33,6 +33,7 @@ run_for_configuration() {
     local vm1_vhost=$2
     local vm2_vcpus=$3
     local vm2_vhost=$4
+    local num_vcpus=$5
 
     log_step "Pinning threads for configuration: VM1 vCPUs=$vm1_vcpus, VM1 vHost=$vm1_vhost, VM2 vCPUs=$vm2_vcpus, VM2 vHost=$vm2_vhost"
     pin_vm_threads "$vm1_vcpus" "$vm1_vhost" "$vm2_vcpus" "$vm2_vhost"
@@ -41,7 +42,7 @@ run_for_configuration() {
     run_iperf3_test
 
     # Save results to a file named after the configuration
-    local result_file_name="/tmp/iperf3_results_${vm1_vcpus}_${vm1_vhost}_${vm2_vcpus}_${vm2_vhost}.txt"
+    local result_file_name="/tmp/iperf3_results_${vm1_vcpus}_${vm1_vhost}_${vm2_vcpus}_${vm2_vhost}_${num_vcpus}.txt"
     cp "$RESULT_FILE" "$result_file_name"
     echo "Results for configuration $vm1_vcpus $vm1_vhost $vm2_vcpus $vm2_vhost saved to $result_file_name"
 }
@@ -75,8 +76,8 @@ run_with_perf_for_configuration() {
         echo "Failed to retrieve QEMU PID for VM2"
         return 1
     fi
-    # Run perf stat for 20 seconds
-    sudo perf stat -e cache-references,cache-misses,L1-dcache-loads,L1-dcache-load-misses,L1-icache-load-misses,LLC-loads,LLC-load-misses,dTLB-loads,dTLB-load-misses -p $vm2_pid -- sleep 20 >> "$perf_result_file_name" 2>&1
+    # Run perf stat for PERF_RECORD_TIME seconds 
+    sudo perf stat -e cache-references,cache-misses,L1-dcache-loads,L1-dcache-load-misses,L1-icache-load-misses,LLC-loads,LLC-load-misses,dTLB-loads,dTLB-load-misses -p $vm2_pid -- sleep $PERF_RECORD_TIME >> "$perf_result_file_name" 2>&1
     echo "Perf results for configuration $vm1_vcpus $vm1_vhost $vm2_vcpus $vm2_vhost with $num_vcpus vCPUs saved to $perf_result_file_name"
 }
 
@@ -132,7 +133,8 @@ run_iperf3_measurements() {
 
     log_step "Generating configurations based on isolated cores"
     generate_configurations
-
+    # Setup passwordless SSH to CVM
+    setup_passwordless_ssh "$cvm_ip" "$cvm_username" "$cvm_password" 
     # Main execution loop
     for num_vcpus in "${NUM_VCPU[@]}"; do
         log_step "Updating VM with $num_vcpus vCPUs"

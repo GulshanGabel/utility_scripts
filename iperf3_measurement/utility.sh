@@ -140,7 +140,7 @@ vm_on() {
 
 # Function to log in to CVM and power off VMs
 vm_off() {
-    ssh "$cvm_username@$cvm_ip" "source /etc/profile && acli vm.on vm1 && acli vm.off vm2"
+    ssh "$cvm_username@$cvm_ip" "source /etc/profile && acli vm.off vm1 && acli vm.off vm2"
 }
 
 # Function to update the number of vCPUs for a VM

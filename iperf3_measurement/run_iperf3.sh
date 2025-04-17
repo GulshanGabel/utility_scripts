@@ -10,7 +10,6 @@ if ! grep -q "source \"$(dirname \"$0\")/config.sh\"" "$0"; then
 fi
 
 # Global variables for iperf3 parameters
-IPERF_TIME=30  # Duration of the test in seconds
 RESULT_FILE="/tmp/iperf3_client_results.txt"  # File to save iperf3 results
 
 # Function to perform iperf3 test

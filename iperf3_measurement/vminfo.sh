@@ -13,8 +13,6 @@ populate_vminfo() {
     log_step "Getting VM information"
     local output_file="/tmp/vminfo"
 
-    # Setup passwordless SSH to CVM
-    setup_passwordless_ssh "$cvm_ip" "$cvm_username" "$cvm_password" 
     # Get VM information directly
     vm1_info=$(ssh -o StrictHostKeyChecking=no "$cvm_username@$cvm_ip" "source /etc/profile && ncli vm ls name=vm1")
     vm2_info=$(ssh -o StrictHostKeyChecking=no "$cvm_username@$cvm_ip" "source /etc/profile && ncli vm ls name=vm2")
