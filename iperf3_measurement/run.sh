@@ -8,7 +8,7 @@ source "$(dirname "$0")/pinning.sh"
 source "$(dirname "$0")/run_iperf3.sh"
 
 RESULT_FILE="/tmp/iperf3_client_results.txt"  # File to save iperf3 results
-REQUIRED_ISOLATED_CORES=8
+
 # Configurations for pinning
 CONFIGURATIONS=(
     "-1 -1 -1 -1" #all cores
@@ -57,23 +57,14 @@ run_with_perf_for_configuration() {
     log_step "Running perf stat recording"
     local perf_result_file_name="/tmp/iperf3_results_${vm1_vcpus}_${vm1_vhost}_${vm2_vcpus}_${vm2_vhost}_perf.txt"
        
-    local vm2_uuid
     local vm2_pid
-    vm2_uuid=$(grep "^vm2_uuid=" /tmp/vminfo | cut -d'=' -f2)
-
-    if [ -z "$vm2_uuid" ]; then
-        echo "Failed to retrieve VM UUIDs from /tmp/vminfo"
-        return 1
-    fi
-
-    vm2_pid=$(ps -ax | grep qemu | grep -w "$vm2_uuid" | grep -v grep | awk '{print $1}')
+    vm2_pid=$(get_vm_info "vm2" "pid")
 
     if [ -z "$vm2_pid" ]; then
-        echo "Failed to retrieve QEMU PIDs for VM2"
+        echo "Failed to retrieve QEMU PID for VM2"
         return 1
     fi
-
-
+    # Run perf stat for 20 seconds
     sudo perf stat -e cache-references,cache-misses,L1-dcache-loads,L1-dcache-load-misses,L1-icache-load-misses,LLC-loads,LLC-load-misses,dTLB-loads,dTLB-load-misses -p $vm2_pid -- sleep 20 >> "$perf_result_file_name" 2>&1
     echo "Perf results for configuration $vm1_vcpus $vm1_vhost $vm2_vcpus $vm2_vhost saved to $perf_result_file_name"
 }
@@ -125,7 +116,9 @@ run_iperf3_measurements() {
     log_step "Running prechecks"
     check_smt_and_isolated_cores
     check_host_dependencies
-    get_vm_info
+
+    log_step "Setting up"
+    populate_vminfo
 
     log_step "Generating configurations based on isolated cores"
     generate_configurations

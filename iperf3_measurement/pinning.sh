@@ -14,50 +14,21 @@ pin_threads_to_core() {
     done
 }
 
-# Function to get QEMU process PIDs for VM1 and VM2 and extract vCPU and vhost threads
-get_qemu_pids() {
-    local vm1_uuid vm2_uuid
-    vm1_uuid=$(grep "^vm1_uuid=" /tmp/vminfo | cut -d'=' -f2)
-    vm2_uuid=$(grep "^vm2_uuid=" /tmp/vminfo | cut -d'=' -f2)
-
-    if [ -z "$vm1_uuid" ] || [ -z "$vm2_uuid" ]; then
-        echo "Failed to retrieve VM UUIDs from /tmp/vminfo"
-        return 1
-    fi
-
-    VM1_PID=$(ps -ax | grep qemu | grep -w "$vm1_uuid" | grep -v grep | awk '{print $1}')
-    VM2_PID=$(ps -ax | grep qemu | grep -w "$vm2_uuid" | grep -v grep | awk '{print $1}')
-
-    if [ -z "$VM1_PID" ] || [ -z "$VM2_PID" ]; then
-        echo "Failed to retrieve QEMU PIDs for VM1 or VM2"
-        return 1
-    fi
-
-    echo "VM1 PID: $VM1_PID"
-    echo "VM2 PID: $VM2_PID"
-
-    # Probe for vCPU and vhost threads for VM1
-    VM1_VCPU_THREADS=($(ps -eL -o ppid,pid,lwp,psr,comm | grep "$VM1_PID" | grep -E "CPU [0-9]+/KVM" | awk '{print $3}'))
-    VM1_VHOST_THREADS=($(ps -eL -o ppid,pid,lwp,psr,comm | grep "$VM1_PID" | grep -E "vhost" | awk '{print $3}'))
-
-    # Probe for vCPU and vhost threads for VM2
-    VM2_VCPU_THREADS=($(ps -eL -o ppid,pid,lwp,psr,comm | grep "$VM2_PID" | grep -E "CPU [0-9]+/KVM" | awk '{print $3}'))
-    VM2_VHOST_THREADS=($(ps -eL -o ppid,pid,lwp,psr,comm | grep "$VM2_PID" | grep -E "vhost" | awk '{print $3}'))
-
-    echo "VM1 vCPU Threads: ${VM1_VCPU_THREADS[@]}"
-    echo "VM1 vHost Threads: ${VM1_VHOST_THREADS[@]}"
-    echo "VM2 vCPU Threads: ${VM2_VCPU_THREADS[@]}"
-    echo "VM2 vHost Threads: ${VM2_VHOST_THREADS[@]}"
-}
-
 # Function to pin vCPU and vhost threads for VM1 and VM2
 pin_vm_threads() {
-    get_qemu_pids
     local vm1_core_start=$1
     local vm1_vhost_core=$2
     local vm2_core_start=$3
     local vm2_vhost_core=$4
 
+    # Probe for vCPU and vhost threads for VM1
+    local VM1_VCPU_THREADS=($(get_vm_info vm1 vcpu_pid))
+    local VM1_VHOST_THREADS=($(get_vm_info vm1 vhost_pid))
+
+    # Probe for vCPU and vhost threads for VM2
+    local VM2_VCPU_THREADS=($(get_vm_info vm2 vcpu_pid))
+    local VM2_VHOST_THREADS=($(get_vm_info vm2 vhost_pid))
+    
     # Check if vm1_core_start is a range
     if [[ "$vm1_core_start" == *-* ]]; then
         for tid in "${VM1_VCPU_THREADS[@]}"; do

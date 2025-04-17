@@ -49,15 +49,88 @@ setup_passwordless_ssh() {
 
     # Check if passwordless SSH is already set up
     if ssh -o PasswordAuthentication=no -o StrictHostKeyChecking=no "$username@$host_ip" "exit" &>/dev/null; then
-        echo "Passwordless SSH is already set up for $username@$host_ip"
         return
     fi
 
     # Generate SSH key if not already present
     if [ ! -f ~/.ssh/id_rsa ]; then
-        ssh-keygen -t rsa -N "" -f ~/.ssh/id_rsa >> /dev/null
+        ssh-keygen -t rsa -N "" -f ~/.ssh/id_rsa &>/dev/null
     fi
 
     # Copy SSH key to the remote host
-    sshpass -p "$password" ssh-copy-id -o StrictHostKeyChecking=no "$username@$host_ip" >> /dev/null
+    if ! sshpass -p "$password" ssh-copy-id -o StrictHostKeyChecking=no "$username@$host_ip" &>/dev/null; then
+        echo "Error: Failed to set up passwordless SSH for $username@$host_ip"
+        exit 1
+    fi
+}
+
+get_vm_info() {
+    local vm=$1
+    local attribute=$2
+    local vminfo_file="/tmp/vminfo"
+
+    # Check if vminfo file exists
+    if [ ! -f "$vminfo_file" ]; then
+        echo "Error: vminfo file not found at $vminfo_file"
+        exit 1
+    fi
+
+    case $attribute in
+        name)
+            grep "^${vm}_name=" "$vminfo_file" | cut -d'=' -f2
+            ;;
+        uuid)
+            grep "^${vm}_uuid=" "$vminfo_file" | cut -d'=' -f2
+            ;;
+        ip)
+            grep "^${vm}_ip=" "$vminfo_file" | cut -d'=' -f2
+            ;;
+        host_ip)
+            grep "^${vm}_host_ip=" "$vminfo_file" | cut -d'=' -f2
+            ;;
+        pid)
+            local uuid
+            uuid=$(get_vm_info "$vm" "uuid")
+            if [ -z "$uuid" ]; then
+                echo "Error: UUID not found for $vm"
+                exit 1
+            fi
+            # Get the VM PID using the UUID
+            ps -ax | grep qemu | grep -w "$uuid" | grep -v grep | awk '{print $1}'
+            ;;
+        vcpu_pid)
+            local pid
+            pid=$(get_vm_info "$vm" "pid")
+            if [ -z "$pid" ]; then
+                echo "Error: PID not found for $vm"
+                exit 1
+            fi
+            # Get the VCPU thread IDs
+            ps -eL -o ppid,pid,lwp,psr,comm | grep "$pid" | grep -E "CPU [0-9]+/KVM" | awk '{print $3}'
+            ;;
+        vhost_pid)
+            local pid
+            pid=$(get_vm_info "$vm" "pid")
+            if [ -z "$pid" ]; then
+                echo "Error: PID not found for $vm"
+                exit 1
+            fi
+            # Get the vhost process ID
+            ps -eL -o ppid,pid,lwp,psr,comm | grep "$pid" | grep -E "vhost" | awk '{print $3}'
+            ;;
+        num_vcpus)
+            local vcpu_pids
+            vcpu_pids=$(get_vm_info "$vm" "vcpu_pid")
+            if [ -z "$vcpu_pids" ]; then
+                echo "Error: No VCPU PIDs found for $vm"
+                exit 1
+            fi
+            # Count the number of VCPU PIDs
+            echo "$vcpu_pids" | wc -l
+            ;;
+        *)
+            echo "Error: Invalid attribute '$attribute'"
+            exit 1
+            ;;
+    esac
 }
