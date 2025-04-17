@@ -26,7 +26,6 @@ if ! grep -q "source \"$(dirname \"$0\")/config.sh\"" "$0"; then
 fi
 
 RESULT_FILE="/tmp/iperf3_client_results.txt"  # File to save iperf3 results
-
 # Function to run all steps for a given configuration
 run_for_configuration() {
     local vm1_vcpus=$1
@@ -34,6 +33,28 @@ run_for_configuration() {
     local vm2_vcpus=$3
     local vm2_vhost=$4
     local num_vcpus=$5
+    local iteration=$6
+
+    # Create the base directory if it does not exist
+    local base_dir="/tmp/iperf_report"
+    if [ ! -d "$base_dir" ]; then
+        mkdir -p "$base_dir"
+    fi
+
+    # Create the configuration directory if it does not exist
+    local config_dir="${base_dir}/vm1_${vm1_vcpus}_${vm1_vhost}_vm2_${vm2_vhost}"
+    if [ ! -d "$config_dir" ]; then
+        mkdir -p "$config_dir"
+    fi
+
+    # Create the num_vcpus directory if it does not exist
+    local vcpu_dir="${config_dir}/${num_vcpus}"
+    if [ ! -d "$vcpu_dir" ]; then
+        mkdir -p "$vcpu_dir"
+    fi
+
+    # File to save results
+    local result_file_name="${vcpu_dir}/${iteration}.txt"
 
     log_step "Pinning threads for configuration: VM1 vCPUs=$vm1_vcpus, VM1 vHost=$vm1_vhost, VM2 vCPUs=$vm2_vcpus, VM2 vHost=$vm2_vhost"
     pin_vm_threads "$vm1_vcpus" "$vm1_vhost" "$vm2_vcpus" "$vm2_vhost"
@@ -41,10 +62,9 @@ run_for_configuration() {
     log_step "Running iperf3 test"
     run_iperf3_test
 
-    # Save results to a file named after the configuration
-    local result_file_name="/tmp/iperf3_results_${vm1_vcpus}_${vm1_vhost}_${vm2_vcpus}_${vm2_vhost}_${num_vcpus}.txt"
+    # Save results to the file
     cp "$RESULT_FILE" "$result_file_name"
-    echo "Results for configuration $vm1_vcpus $vm1_vhost $vm2_vcpus $vm2_vhost saved to $result_file_name"
+    echo "Results for configuration $vm1_vcpus $vm1_vhost $vm2_vcpus $vm2_vhost with $num_vcpus vCPUs and iteration $iteration saved to $result_file_name"
 }
 
 # Function to run all steps for a given configuration
@@ -136,6 +156,7 @@ run_iperf3_measurements() {
     # Setup passwordless SSH to CVM
     setup_passwordless_ssh "$cvm_ip" "$cvm_username" "$cvm_password" 
     # Main execution loop
+    populate_vminfo
     for num_vcpus in "${NUM_VCPU[@]}"; do
         log_step "Updating VM with $num_vcpus vCPUs"
         vm_update "$num_vcpus"
@@ -144,9 +165,10 @@ run_iperf3_measurements() {
             log_step "Processing configuration: $config"
             vm_off
             vm_on
-            populate_vminfo
-
-            run_for_configuration $config "$num_vcpus"
+            #populate_vminfo
+            for iteration in {1..3}; do
+                run_for_configuration $config "$num_vcpus" "$iteration"
+            done
             run_with_perf_for_configuration $config "$num_vcpus"
         done
     done
