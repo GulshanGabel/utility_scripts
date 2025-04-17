@@ -77,7 +77,7 @@ run_with_perf_for_configuration() {
         return 1
     fi
     # Run perf stat for PERF_RECORD_TIME seconds 
-    sudo perf stat -e cache-references,cache-misses,L1-dcache-loads,L1-dcache-load-misses,L1-icache-load-misses,LLC-loads,LLC-load-misses,dTLB-loads,dTLB-load-misses -p $vm2_pid -- sleep $PERF_RECORD_TIME >> "$perf_result_file_name" 2>&1
+    sudo perf stat -e cache-references,cache-misses,L1-dcache-loads,L1-dcache-load-misses,L1-icache-load-misses,LLC-loads,LLC-load-misses,dTLB-loads,dTLB-load-misses -p $vm2_pid -- sleep $PERF_RECORD_TIME > "$perf_result_file_name" 2>&1
     echo "Perf results for configuration $vm1_vcpus $vm1_vhost $vm2_vcpus $vm2_vhost with $num_vcpus vCPUs saved to $perf_result_file_name"
 }
 
