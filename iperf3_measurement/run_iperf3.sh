@@ -1,7 +1,13 @@
 #!/bin/bash
 
 # Load utility functions
-source "$(dirname "$0")/utility.sh"
+if ! grep -q "source \"$(dirname \"$0\")/utility.sh\"" "$0"; then
+    source "$(dirname "$0")/utility.sh"
+fi
+
+if ! grep -q "source \"$(dirname \"$0\")/config.sh\"" "$0"; then
+    source "$(dirname "$0")/config.sh"
+fi
 
 # Global variables for iperf3 parameters
 IPERF_TIME=30  # Duration of the test in seconds

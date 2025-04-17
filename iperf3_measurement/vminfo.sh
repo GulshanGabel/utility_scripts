@@ -1,20 +1,20 @@
 #!/bin/bash 
 
 # Source the utility.sh file
-source "$(dirname "$0")/utility.sh"
+if ! grep -q "source \"$(dirname \"$0\")/utility.sh\"" "$0"; then
+    source "$(dirname "$0")/utility.sh"
+fi
+
+if ! grep -q "source \"$(dirname \"$0\")/config.sh\"" "$0"; then
+    source "$(dirname "$0")/config.sh"
+fi
 
 populate_vminfo() {
     log_step "Getting VM information"
-    local cvm_ip="192.168.5.254"
-    local cvm_username="nutanix"
-    local cvm_password="RDMCluster.123"
-    local vm_user="root"
-    local vm_password="nutanix/4u"
     local output_file="/tmp/vminfo"
 
     # Setup passwordless SSH to CVM
     setup_passwordless_ssh "$cvm_ip" "$cvm_username" "$cvm_password" 
-
     # Get VM information directly
     vm1_info=$(ssh -o StrictHostKeyChecking=no "$cvm_username@$cvm_ip" "source /etc/profile && ncli vm ls name=vm1")
     vm2_info=$(ssh -o StrictHostKeyChecking=no "$cvm_username@$cvm_ip" "source /etc/profile && ncli vm ls name=vm2")
@@ -22,6 +22,54 @@ populate_vminfo() {
     # Extract IPs and UUIDs
     vm1_ips=$(echo "$vm1_info" | grep -i 'VM IP Addresses' | awk '{print $NF}')
     vm2_ips=$(echo "$vm2_info" | grep -i 'VM IP Addresses' | awk '{print $NF}')
+
+    # Determine reachable IPs and setup passwordless SSH
+    vm1_ip=""
+    retry_count=0
+    while [[ -z "$vm1_ip" && $retry_count -lt 10 ]]; do
+        for ip in $vm1_ips; do
+            if ping -c 10 "$ip" &>/dev/null; then
+                setup_passwordless_ssh "$ip" "$vm_user" "$vm_password"
+                vm1_ip="$ip"
+                break
+            fi
+        done
+        if [[ -z "$vm1_ip" ]]; then
+            echo "Retrying to reach VM1 IPs... Attempt $((retry_count + 1))"
+            ((retry_count++))
+            sleep 1
+            # Refresh VM1 IPs in case they have been updated
+            vm1_info=$(ssh -o StrictHostKeyChecking=no "$cvm_username@$cvm_ip" "source /etc/profile && ncli vm ls name=vm1")
+            vm1_ips=$(echo "$vm1_info" | grep -i 'VM IP Addresses' | awk '{print $NF}')
+        fi
+    done
+    if [[ -z "$vm1_ip" ]]; then
+        echo "Error: None of the IPs for VM1 are reachable after 10 retries."
+    fi
+
+    vm2_ip=""
+    retry_count=0
+    while [[ -z "$vm2_ip" && $retry_count -lt 10 ]]; do
+        for ip in $vm2_ips; do
+            if ping -c 10 "$ip" &>/dev/null; then
+                setup_passwordless_ssh "$ip" "$vm_user" "$vm_password"
+                vm2_ip="$ip"
+                break
+            fi
+        done
+        if [[ -z "$vm2_ip" ]]; then
+            echo "Retrying to reach VM2 IPs... Attempt $((retry_count + 1))"
+            ((retry_count++))
+            sleep 1
+            # Refresh VM2 IPs in case they have been updated
+            vm2_info=$(ssh -o StrictHostKeyChecking=no "$cvm_username@$cvm_ip" "source /etc/profile && ncli vm ls name=vm2")
+            vm2_ips=$(echo "$vm2_info" | grep -i 'VM IP Addresses' | awk '{print $NF}')
+        fi
+    done
+    if [[ -z "$vm2_ip" ]]; then
+        echo "Error: None of the IPs for VM2 are reachable after 10 retries."
+    fi
+
     vm1_uuid=$(echo "$vm1_info" | grep -i 'UUID' | grep -iv 'Hypervisor Host Uuid' | awk '{print $NF}')
     vm2_uuid=$(echo "$vm2_info" | grep -i 'UUID' | grep -iv 'Hypervisor Host Uuid' | awk '{print $NF}')
 
@@ -35,30 +83,6 @@ populate_vminfo() {
     vm1_host_ip=$(echo "$vm1_host_info" | grep -i 'Hypervisor Address' | awk '{print $NF}') 
     vm2_host_ip=$(echo "$vm2_host_info" | grep -i 'Hypervisor Address' | awk '{print $NF}')
 
-    # Determine reachable IPs and setup passwordless SSH
-    vm1_ip=""
-    for ip in $vm1_ips; do
-        if ping -c 1 "$ip" &>/dev/null; then
-            setup_passwordless_ssh "$ip" "$vm_user" "$vm_password"
-            vm1_ip="$ip"
-            break
-        fi
-    done
-    if [[ -z "$vm1_ip" ]]; then
-        echo "Error: None of the IPs for VM1 are reachable via ping."
-    fi
-
-    vm2_ip=""
-    for ip in $vm2_ips; do
-        if ping -c 1 "$ip" &>/dev/null; then
-            setup_passwordless_ssh "$ip" "$vm_user" "$vm_password"
-            vm2_ip="$ip"
-            break
-        fi
-    done
-    if [[ -z "$vm2_ip" ]]; then
-        echo "Error: None of the IPs for VM2 are reachable via ping."
-    fi
 
     # Save VM information to the output file
     {

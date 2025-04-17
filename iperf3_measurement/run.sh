@@ -1,21 +1,31 @@
 #!/bin/bash
 
 # Load utility functions
-source "$(dirname "$0")/utility.sh"
-source "$(dirname "$0")/prechecks.sh"
-source "$(dirname "$0")/vminfo.sh"
-source "$(dirname "$0")/pinning.sh"
-source "$(dirname "$0")/run_iperf3.sh"
+if ! grep -q "source \"$(dirname \"$0\")/utility.sh\"" "$0"; then
+    source "$(dirname "$0")/utility.sh"
+fi
+
+if ! grep -q "source \"$(dirname \"$0\")/prechecks.sh\"" "$0"; then
+    source "$(dirname "$0")/prechecks.sh"
+fi
+
+if ! grep -q "source \"$(dirname \"$0\")/vminfo.sh\"" "$0"; then
+    source "$(dirname "$0")/vminfo.sh"
+fi
+
+if ! grep -q "source \"$(dirname \"$0\")/pinning.sh\"" "$0"; then
+    source "$(dirname "$0")/pinning.sh"
+fi
+
+if ! grep -q "source \"$(dirname \"$0\")/run_iperf3.sh\"" "$0"; then
+    source "$(dirname "$0")/run_iperf3.sh"
+fi
+
+if ! grep -q "source \"$(dirname \"$0\")/config.sh\"" "$0"; then
+    source "$(dirname "$0")/config.sh"
+fi
 
 RESULT_FILE="/tmp/iperf3_client_results.txt"  # File to save iperf3 results
-
-# Configurations for pinning
-CONFIGURATIONS=(
-    "-1 -1 -1 -1" #all cores
-    "0 3 4 7" #same ccx
-    "0 8 4 9" #Both vm's vpcu same ccx, both vhost same ccx, but vhosts and vcpus on different ccx
-    "0 4 8 12" #vcpus and vhosts per vm on same ccx, but each vcpus and vhosts on different ccx
-)
 
 # Function to run all steps for a given configuration
 run_for_configuration() {
@@ -42,6 +52,7 @@ run_with_perf_for_configuration() {
     local vm1_vhost=$2
     local vm2_vcpus=$3
     local vm2_vhost=$4
+    local num_vcpus=$5
 
     log_step "Pinning threads for configuration: VM1 vCPUs=$vm1_vcpus, VM1 vHost=$vm1_vhost, VM2 vCPUs=$vm2_vcpus, VM2 vHost=$vm2_vhost"
     pin_vm_threads "$vm1_vcpus" "$vm1_vhost" "$vm2_vcpus" "$vm2_vhost"
@@ -50,12 +61,12 @@ run_with_perf_for_configuration() {
     run_iperf3_test
 
     # Save iperf3 results to a file named after the configuration
-    local result_file_name="/tmp/iperf3_results_${vm1_vcpus}_${vm1_vhost}_${vm2_vcpus}_${vm2_vhost}.txt"
+    local result_file_name="/tmp/iperf3_results_${vm1_vcpus}_${vm1_vhost}_${vm2_vcpus}_${vm2_vhost}_${num_vcpus}.txt"
     cp "$RESULT_FILE" "$result_file_name"
-    echo "Results for configuration $vm1_vcpus $vm1_vhost $vm2_vcpus $vm2_vhost saved to $result_file_name"
+    echo "Results for configuration $vm1_vcpus $vm1_vhost $vm2_vcpus $vm2_vhost with $num_vcpus vCPUs saved to $result_file_name"
 
     log_step "Running perf stat recording"
-    local perf_result_file_name="/tmp/iperf3_results_${vm1_vcpus}_${vm1_vhost}_${vm2_vcpus}_${vm2_vhost}_perf.txt"
+    local perf_result_file_name="/tmp/iperf3_results_${vm1_vcpus}_${vm1_vhost}_${vm2_vcpus}_${vm2_vhost}_${num_vcpus}_perf.txt"
        
     local vm2_pid
     vm2_pid=$(get_vm_info "vm2" "pid")
@@ -66,7 +77,7 @@ run_with_perf_for_configuration() {
     fi
     # Run perf stat for 20 seconds
     sudo perf stat -e cache-references,cache-misses,L1-dcache-loads,L1-dcache-load-misses,L1-icache-load-misses,LLC-loads,LLC-load-misses,dTLB-loads,dTLB-load-misses -p $vm2_pid -- sleep 20 >> "$perf_result_file_name" 2>&1
-    echo "Perf results for configuration $vm1_vcpus $vm1_vhost $vm2_vcpus $vm2_vhost saved to $perf_result_file_name"
+    echo "Perf results for configuration $vm1_vcpus $vm1_vhost $vm2_vcpus $vm2_vhost with $num_vcpus vCPUs saved to $perf_result_file_name"
 }
 
 # Function to determine configurations based on isolated cores
@@ -111,23 +122,31 @@ generate_configurations() {
     CONFIGURATIONS=("${generated_configs[@]}")
 }
 
+
+
 # Function to execute the main logic
 run_iperf3_measurements() {
     log_step "Running prechecks"
     check_smt_and_isolated_cores
     check_host_dependencies
 
-    log_step "Setting up"
-    populate_vminfo
-
     log_step "Generating configurations based on isolated cores"
     generate_configurations
 
     # Main execution loop
-    for config in "${CONFIGURATIONS[@]}"; do
-        log_step "Processing configuration: $config"
-        run_for_configuration $config
-        run_with_perf_for_configuration $config
+    for num_vcpus in "${NUM_VCPU[@]}"; do
+        log_step "Updating VM with $num_vcpus vCPUs"
+        vm_update "$num_vcpus"
+
+        for config in "${CONFIGURATIONS[@]}"; do
+            log_step "Processing configuration: $config"
+            vm_off
+            vm_on
+            populate_vminfo
+
+            run_for_configuration $config "$num_vcpus"
+            run_with_perf_for_configuration $config "$num_vcpus"
+        done
     done
 
     log_step "All configurations processed successfully."

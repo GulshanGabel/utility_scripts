@@ -1,4 +1,5 @@
 #!/bin/bash
+source "$(dirname "$0")/config.sh"
 
 # Function to pin threads to a specified core
 pin_threads_to_core() {

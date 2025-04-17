@@ -1,8 +1,6 @@
 #!/bin/bash
 
-# Global variables to list all dependencies
-HOST_DEPENDENCIES=("sshpass" "ssh" "ssh-keygen" "ssh-copy-id" "ping" "grep" "awk")
-VM_DEPENDENCIES=("iperf3")
+source "$(dirname "$0")/config.sh"
 
 log_step() {
     echo "========== $1 =========="
@@ -133,4 +131,27 @@ get_vm_info() {
             exit 1
             ;;
     esac
+}
+
+# Function to log in to CVM and start VMs
+vm_on() {
+    ssh "$cvm_username@$cvm_ip" "source /etc/profile && acli vm.start vm1 && acli vm.start vm2"
+}
+
+# Function to log in to CVM and power off VMs
+vm_off() {
+    ssh "$cvm_username@$cvm_ip" "source /etc/profile && acli vm.stop vm1 && acli vm.stop vm2"
+}
+
+# Function to update the number of vCPUs for a VM
+vm_update() {
+    local num_vcpus=$1
+    if [[ -z "$num_vcpus" ]]; then
+        echo "Error: num_vcpus argument is required."
+        return 1
+    fi
+
+    vm_off
+    ssh "$cvm_username@$cvm_ip" "source /etc/profile && acli vm.update vm1 num_vcpus=$num_vcpus"
+    vm_on
 }
