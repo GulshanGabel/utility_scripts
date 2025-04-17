@@ -153,5 +153,6 @@ vm_update() {
 
     vm_off
     ssh "$cvm_username@$cvm_ip" "source /etc/profile && acli vm.update vm1 num_vcpus=$num_vcpus"
+    ssh "$cvm_username@$cvm_ip" "source /etc/profile && acli vm.update vm2 num_vcpus=$num_vcpus"
     vm_on
 }
