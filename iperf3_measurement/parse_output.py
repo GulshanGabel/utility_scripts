@@ -5,7 +5,8 @@ def extract_bitrate(file_path):
     bitrates = []
 
     with open(file_path, 'r') as file:
-        for line in file:
+        lines = file.readlines()[-4:]  # Read only the last 4 lines
+        for line in lines:
             if "sender" in line or "receiver" in line:
                 parts = line.split()
                 try:

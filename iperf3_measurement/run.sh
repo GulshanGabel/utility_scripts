@@ -166,7 +166,7 @@ run_iperf3_measurements() {
             vm_off
             vm_on
             #populate_vminfo
-            for iteration in {1..3}; do
+            for iteration in {1..10}; do
                 run_for_configuration $config "$num_vcpus" "$iteration"
             done
             run_with_perf_for_configuration $config "$num_vcpus"
