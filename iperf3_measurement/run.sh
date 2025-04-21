@@ -138,7 +138,7 @@ generate_configurations() {
             fi
         done
         generated_configs+=("${new_config[*]} $enable_sibling_pinning")
-        echo "Generated configuration: ${new_config[*]}"
+        echo "Generated configuration: ${new_config[*]} $enable_sibling_pinning"
     done
     CONFIGURATIONS=("${generated_configs[@]}")
 }
