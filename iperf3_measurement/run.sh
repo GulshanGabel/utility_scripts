@@ -120,7 +120,7 @@ generate_configurations() {
     local generated_configs=()
     for config in "${CONFIGURATIONS[@]}"; do
         # Split the configuration into four separate numbers
-        read -r vm1_vcpus vm1_vhost vm2_vcpus vm2_vhost <<< "$config"
+        read -r vm1_vcpus vm1_vhost vm2_vcpus vm2_vhost enable_sibling_pinning <<< "$config"
         local new_config=()
         for core in "$vm1_vcpus" "$vm1_vhost" "$vm2_vcpus" "$vm2_vhost"; do
             if [ "$core" -lt 0 ]; then
@@ -137,7 +137,7 @@ generate_configurations() {
                 new_config+=("$adjusted_core")
             fi
         done
-        generated_configs+=("${new_config[*]}")
+        generated_configs+=("${new_config[*]} $enable_sibling_pinning")
         echo "Generated configuration: ${new_config[*]}"
     done
     CONFIGURATIONS=("${generated_configs[@]}")
