@@ -73,21 +73,21 @@ run_with_perf_for_configuration() {
     local vm1_vhost=$2
     local vm2_vcpus=$3
     local vm2_vhost=$4
-    local num_vcpus=$5
-
+    local ENABLE_SIBLING_PINNING=$5
+    local num_vcpus=$6
     log_step "Pinning threads for configuration: VM1 vCPUs=$vm1_vcpus, VM1 vHost=$vm1_vhost, VM2 vCPUs=$vm2_vcpus, VM2 vHost=$vm2_vhost"
-    pin_vm_threads "$vm1_vcpus" "$vm1_vhost" "$vm2_vcpus" "$vm2_vhost"
+    pin_vm_threads "$vm1_vcpus" "$vm1_vhost" "$vm2_vcpus" "$vm2_vhost" "$ENABLE_SIBLING_PINNING"
 
     log_step "Running iperf3 test"
     run_iperf3_test
 
     # Save iperf3 results to a file named after the configuration
-    local result_file_name="/tmp/iperf3_results_${vm1_vcpus}_${vm1_vhost}_${vm2_vcpus}_${vm2_vhost}_${num_vcpus}.txt"
+    local result_file_name="/tmp/iperf3_results_${vm1_vcpus}_${vm1_vhost}_${vm2_vcpus}_${vm2_vhost}_${num_vcpus}_${ENABLE_SIBLING_PINNING}.txt"
     cp "$RESULT_FILE" "$result_file_name"
     echo "Results for configuration $vm1_vcpus $vm1_vhost $vm2_vcpus $vm2_vhost with $num_vcpus vCPUs saved to $result_file_name"
 
     log_step "Running perf stat recording"
-    local perf_result_file_name="/tmp/iperf3_results_${vm1_vcpus}_${vm1_vhost}_${vm2_vcpus}_${vm2_vhost}_${num_vcpus}_perf.txt"
+    local perf_result_file_name="/tmp/iperf3_results_${vm1_vcpus}_${vm1_vhost}_${vm2_vcpus}_${vm2_vhost}_${num_vcpus}_{ENABLE_SIBLING_PINNING}_perf.txt"
        
     local vm2_pid
     vm2_pid=$(get_vm_info "vm2" "pid")
@@ -163,13 +163,16 @@ run_iperf3_measurements() {
 
         for config in "${CONFIGURATIONS[@]}"; do
             log_step "Processing configuration: $config"
-            vm_off
-            vm_on
             #populate_vminfo
-            for iteration in {1..10}; do
-                run_for_configuration $config "$num_vcpus" "$iteration"
+            for iteration in {1..5}; do
+                vm_off
+                vm_on
+                run_for_configuration $config "$num_vcpus" "$iteration" "on"
+                vm_off
+                vm_on
+                run_for_configuration $config "$num_vcpus" "$iteration" "off"
             done
-            run_with_perf_for_configuration $config "$num_vcpus"
+            run_with_perf_for_configuration $config "$num_vcpus" 
         done
     done
 

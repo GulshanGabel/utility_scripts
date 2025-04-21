@@ -21,7 +21,7 @@ pin_vm_threads() {
     local vm1_vhost_core=$2
     local vm2_core_start=$3
     local vm2_vhost_core=$4
-
+    local ENABLE_SIBLING_PINNING=${5:-"off"}
     # Probe for vCPU and vhost threads for VM1
     local VM1_VCPU_THREADS=($(get_vm_info vm1 vcpu_pid))
     local VM1_VHOST_THREADS=($(get_vm_info vm1 vhost_pid))
@@ -35,11 +35,25 @@ pin_vm_threads() {
         for tid in "${VM1_VCPU_THREADS[@]}"; do
             pin_threads_to_core "$vm1_core_start" "$tid"
         done
-    else
-        # Pin VM1 vCPU threads serially starting from vm1_core_start
+    elif [[ "$ENABLE_SIBLING_PINNING" == "on" ]]; then
+        # Pin VM1 vCPU threads to cores and their hyperthreading siblings
         local core=$vm1_core_start
-        for tid in "${VM1_VCPU_THREADS[@]}"; do
-            pin_threads_to_core "$core" "$tid"
+        for ((i = 0; i < ${#VM1_VCPU_THREADS[@]}; i += 2)); do
+            local tid1=${VM1_VCPU_THREADS[$i]}
+            local tid2=${VM1_VCPU_THREADS[$((i + 1))]}
+
+            # Pin first thread to the core
+            pin_threads_to_core "$core" "$tid1"
+
+            # Find the sibling core using sysfs
+            local sibling_core
+            sibling_core=$(cat /sys/devices/system/cpu/cpu"$core"/topology/thread_siblings_list | cut -d',' -f2)
+            if [[ -n "$sibling_core" && -n "$tid2" ]]; then
+                # Pin second thread to the hyperthreading sibling of the core
+                pin_threads_to_core "$sibling_core" "$tid2"
+            fi
+
+            # Move to the next core
             core=$((core + 1))
         done
     fi

@@ -20,10 +20,13 @@
 
     # Configurations for pinning
     CONFIGURATIONS=(
-        "-1 -1 -1 -1" # all cores
-        "0 3 4 7"     # same ccx
-        "0 8 4 9"     # Both vm's vpcu same ccx, both vhost same ccx, but vhosts and vcpus on different ccx
-        "0 4 8 12"    # vcpus and vhosts per vm on same ccx, but each vcpus and vhosts on different ccx
+        "-1 -1 -1 -1 off" # all cores
+        "0 3 4 7 off"     # same ccx
+        "0 3 4 7 on"     # same ccx
+        "0 8 4 9 off"     # Both vm's vpcu same ccx, both vhost same ccx, but vhosts and vcpus on different ccx
+        "0 8 4 9 on"
+        "0 4 8 12 off"    # vcpus and vhosts per vm on same ccx, but each vcpus and vhosts on different ccx
+        "0 4 8 12 on"
     )
 
     NUM_VCPU=(
