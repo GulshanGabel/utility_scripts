@@ -32,8 +32,9 @@ run_for_configuration() {
     local vm1_vhost=$2
     local vm2_vcpus=$3
     local vm2_vhost=$4
-    local num_vcpus=$5
-    local iteration=$6
+    local enable_sibling_pinning=$5
+    local num_vcpus=$6
+    local iteration=$7
 
     # Create the base directory if it does not exist
     local base_dir="/tmp/iperf_report"
@@ -42,7 +43,7 @@ run_for_configuration() {
     fi
 
     # Create the configuration directory if it does not exist
-    local config_dir="${base_dir}/vm1_${vm1_vcpus}_${vm1_vhost}_vm2_${vm1_vcpus}_${vm2_vhost}"
+    local config_dir="${base_dir}/vm1_${vm1_vcpus}_${vm1_vhost}_vm2_${vm1_vcpus}_${vm2_vhost}_${enable_sibling_pinning}"
     if [ ! -d "$config_dir" ]; then
         mkdir -p "$config_dir"
     fi
@@ -58,7 +59,7 @@ run_for_configuration() {
 
     log_step "Pinning threads for configuration: VM1 vCPUs=$vm1_vcpus, VM1 vHost=$vm1_vhost, VM2 vCPUs=$vm2_vcpus, VM2 vHost=$vm2_vhost"
     pin_vm_threads "$vm1_vcpus" "$vm1_vhost" "$vm2_vcpus" "$vm2_vhost"
-
+    vm_self_reboot #only here for virtio case where we need to reboot the VM to apply pinning io thread to specified core
     log_step "Running iperf3 test"
     run_iperf3_test
 
@@ -75,6 +76,7 @@ run_with_perf_for_configuration() {
     local vm2_vhost=$4
     local ENABLE_SIBLING_PINNING=$5
     local num_vcpus=$6
+    local option=$7 
     log_step "Pinning threads for configuration: VM1 vCPUs=$vm1_vcpus, VM1 vHost=$vm1_vhost, VM2 vCPUs=$vm2_vcpus, VM2 vHost=$vm2_vhost"
     pin_vm_threads "$vm1_vcpus" "$vm1_vhost" "$vm2_vcpus" "$vm2_vhost" "$ENABLE_SIBLING_PINNING"
 
@@ -86,8 +88,8 @@ run_with_perf_for_configuration() {
     cp "$RESULT_FILE" "$result_file_name"
     echo "Results for configuration $vm1_vcpus $vm1_vhost $vm2_vcpus $vm2_vhost with $num_vcpus vCPUs saved to $result_file_name"
 
-    log_step "Running perf stat recording"
-    local perf_result_file_name="/tmp/iperf3_results_${vm1_vcpus}_${vm1_vhost}_${vm2_vcpus}_${vm2_vhost}_${num_vcpus}_{ENABLE_SIBLING_PINNING}_perf.txt"
+    log_step "Running perf stat recording for $option"
+    local perf_result_file_name="/tmp/iperf3_results_${vm1_vcpus}_${vm1_vhost}_${vm2_vcpus}_${vm2_vhost}_${num_vcpus}_${ENABLE_SIBLING_PINNING}_perf_${option}.txt"
        
     local vm2_pid
     vm2_pid=$(get_vm_info "vm2" "pid")
@@ -96,8 +98,29 @@ run_with_perf_for_configuration() {
         echo "Failed to retrieve QEMU PID for VM2"
         return 1
     fi
-    # Run perf stat for PERF_RECORD_TIME seconds 
-    sudo perf stat -e cache-references,cache-misses,L1-dcache-loads,L1-dcache-load-misses,L1-icache-load-misses,LLC-loads,LLC-load-misses,dTLB-loads,dTLB-load-misses -p $vm2_pid -- sleep $PERF_RECORD_TIME > "$perf_result_file_name" 2>&1
+    case "$option" in
+        cache)
+            if perf list | grep -q "l3_misses" && perf list | grep -q "l3_cache_accesses"; then
+                sudo perf stat -e cache-references,cache-misses,L1-dcache-loads,L1-dcache-load-misses,L1-icache-load-misses,LLC-loads,LLC-load-misses,dTLB-loads,dTLB-load-misses -M l3_misses,l3_cache_accesses -p $vm2_pid -- sleep $PERF_RECORD_TIME > "$perf_result_file_name" 2>&1
+            else
+                sudo perf stat -e cache-references,cache-misses,L1-dcache-loads,L1-dcache-load-misses,L1-icache-load-misses,LLC-loads,LLC-load-misses,dTLB-loads,dTLB-load-misses -p $vm2_pid -- sleep $PERF_RECORD_TIME > "$perf_result_file_name" 2>&1
+            fi
+            ;;
+        profile)
+            local perf_profile_output="/tmp/perf_profile_${vm2_pid}.data"
+            sudo perf record -p $vm2_pid -o "$perf_profile_output" -- sleep $PERF_RECORD_TIME > "$perf_result_file_name" 2>&1
+            sudo perf report -i "$perf_profile_output" > "$perf_result_file_name" 2>&1
+            ;;
+        vmexit)
+            local perf_kvm_output="/tmp/perf_kvm_${vm2_pid}.data"
+            sudo perf kvm stat record -p $vm2_pid -o "$perf_kvm_output" -- sleep $PERF_RECORD_TIME
+            sudo perf kvm -i "$perf_kvm_output" report > "$perf_result_file_name" 2>&1
+            ;;
+        *)
+            echo "Invalid option: $option"
+            return 1
+            ;;
+    esac
     echo "Perf results for configuration $vm1_vcpus $vm1_vhost $vm2_vcpus $vm2_vhost with $num_vcpus vCPUs saved to $perf_result_file_name"
 }
 
@@ -163,16 +186,17 @@ run_iperf3_measurements() {
 
         for config in "${CONFIGURATIONS[@]}"; do
             log_step "Processing configuration: $config"
-            #populate_vminfo
-            for iteration in {1..5}; do
+
+            for iteration in $(seq 1 "$iterations"); do
                 vm_off
                 vm_on
-                run_for_configuration $config "$num_vcpus" "$iteration" "on"
-                vm_off
-                vm_on
-                run_for_configuration $config "$num_vcpus" "$iteration" "off"
+                sleep 3
+                populate_vminfo
+                run_for_configuration $config "$num_vcpus" "$iteration" 
             done
-            run_with_perf_for_configuration $config "$num_vcpus" 
+            run_with_perf_for_configuration $config "$num_vcpus" "cache"
+            run_with_perf_for_configuration $config "$num_vcpus" "profile"
+            run_with_perf_for_configuration $config "$num_vcpus" "vmexit"
         done
     done
 

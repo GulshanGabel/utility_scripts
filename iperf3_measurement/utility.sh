@@ -113,8 +113,13 @@ get_vm_info() {
                 echo "Error: PID not found for $vm"
                 exit 1
             fi
-            # Get the vhost process ID
-            ps -eL -o ppid,pid,lwp,psr,comm | grep "$pid" | grep -E "vhost" | awk '{print $3}'
+            # Note: In case the "vhost" thread is not found, the script falls back to 
+            # returning the "IO" thread of the QEMU process.
+            vhost_pid=$(ps -eL -o ppid,pid,lwp,psr,comm | grep "$pid" | grep -E "vhost" | awk '{print $3}')
+            if [ -z "$vhost_pid" ]; then
+                vhost_pid=$(ps -eL -o ppid,pid,lwp,psr,comm | grep "$pid" | grep -E "IO" | awk '{print $3}')
+            fi
+            echo "$vhost_pid"
             ;;
         num_vcpus)
             local vcpu_pids
@@ -131,6 +136,10 @@ get_vm_info() {
             exit 1
             ;;
     esac
+}
+# Function to log in to CVM and reboot VMs
+vm_self_reboot() {
+    ssh "$cvm_username@$cvm_ip" "source /etc/profile && acli vm.reboot vm1 && acli vm.reboot vm2"
 }
 
 # Function to log in to CVM and start VMs
