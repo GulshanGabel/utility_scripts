@@ -18,15 +18,15 @@ run_iperf3_test() {
     vm2_ip=$(get_vm_info vm2 ip)
     vm2_num_vcpu=$(get_vm_info vm2 num_vcpus)
 
-    # Check if VM1 is reachable
-    echo "Checking connectivity to VM1 ($vm1_ip)..."
+    # Check if VM1 is SSH-accessible
+    echo "Checking SSH connectivity to VM1 ($vm1_ip)..."
     for i in {1..1000}; do
-        if ping -c 1 "$vm1_ip" &> /dev/null; then
-            echo "VM1 ($vm1_ip) is reachable."
+        if ssh -o BatchMode=yes -o ConnectTimeout=5 root@"$vm1_ip" "exit" &> /dev/null; then
+            echo "VM1 ($vm1_ip) is SSH-accessible."
             break
         fi
         if [ $i -eq 1000 ]; then
-            echo "Error: VM1 ($vm1_ip) is not reachable after 1000 attempts."
+            echo "Error: VM1 ($vm1_ip) is not SSH-accessible after 1000 attempts."
             exit 1
         fi
     done
