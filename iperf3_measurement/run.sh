@@ -43,7 +43,7 @@ run_for_configuration() {
     fi
 
     # Create the configuration directory if it does not exist
-    local config_dir="${base_dir}/vm1_${vm1_vcpus}_${vm1_vhost}_vm2_${vm1_vcpus}_${vm2_vhost}_${enable_sibling_pinning}"
+    local config_dir="${base_dir}/vm1_${vm1_vcpus}_${vm1_vhost}_vm2_${vm2_vcpus}_${vm2_vhost}_${enable_sibling_pinning}"
     if [ ! -d "$config_dir" ]; then
         mkdir -p "$config_dir"
     fi
@@ -59,7 +59,7 @@ run_for_configuration() {
 
     log_step "Pinning threads for configuration: VM1 vCPUs=$vm1_vcpus, VM1 vHost=$vm1_vhost, VM2 vCPUs=$vm2_vcpus, VM2 vHost=$vm2_vhost"
     pin_vm_threads "$vm1_vcpus" "$vm1_vhost" "$vm2_vcpus" "$vm2_vhost"
-    vm_self_reboot #only here for virtio case where we need to reboot the VM to apply pinning io thread to specified core
+    #vm_self_reboot #only here for virtio case where we need to reboot the VM to apply pinning io thread to specified core
     log_step "Running iperf3 test"
     run_iperf3_test
 
@@ -194,9 +194,9 @@ run_iperf3_measurements() {
                 populate_vminfo
                 run_for_configuration $config "$num_vcpus" "$iteration" 
             done
-            run_with_perf_for_configuration $config "$num_vcpus" "cache"
-            run_with_perf_for_configuration $config "$num_vcpus" "profile"
-            run_with_perf_for_configuration $config "$num_vcpus" "vmexit"
+#            run_with_perf_for_configuration $config "$num_vcpus" "cache"
+#            run_with_perf_for_configuration $config "$num_vcpus" "profile"
+#            run_with_perf_for_configuration $config "$num_vcpus" "vmexit"
         done
     done
 
